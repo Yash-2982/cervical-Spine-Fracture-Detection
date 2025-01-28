@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-image: url('{{ url_for('static', filename='BG.jpg') }}'); 
+      background-size: cover;
+      background-position: center;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    
+    #main-container {
+      background-color: rgba(255, 255, 255, 0.7); /* Translucent white background */
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.3); /* Shadow effect */
+      text-align: center;
+      margin-top: 100px;
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    
+    form {
+      text-align: center;
+    }
+    
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    
+    button {
+      width: 100%;
+      padding: 10px;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    .error-message {
+      color: red;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="main-container">
+    <h1>Login</h1>
+    <form id="login-form" action="/" method="post" onsubmit="return validateForm()">
+      <input type="text" id="username" name="username" placeholder="Username" required />
+      <input type="password" id="password" name="password" placeholder="Password" required />
+      <button type="submit" name="login">Login</button>
+      <div id="error-message" class="error-message"></div>
+    </form>
+    <p>Don't have an account? <a href="/signup">Sign Up</a></p>
+  </div>
+
+  <script>
+    function validateForm() {
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value.trim();
+      const errorMessage = document.getElementById("error-message");
+
+      // Perform validation
+      if (username === "" || password === "") {
+        errorMessage.textContent = "Username and password are required.";
+        return false;
+      } else if (username.length < 5) {
+        errorMessage.textContent = "Username must be at least 5 characters long.";
+        return false;
+      } else if (password.length < 8) {
+        errorMessage.textContent = "Password must be at least 8 characters long.";
+        return false;
+      }
+
+      // If validation passes, clear error message
+      errorMessage.textContent = "";
+      return true;
+    }
+  </script>
+</body>
+</html>

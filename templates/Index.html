@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cervical Spine Fracture Detection</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-image: url('{{ url_for('static', filename='BGIM.jpg') }}'); 
+      background-size: cover;
+      background-position: center;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    #main-container {
+      background-color: rgba(255, 255, 255, 0.7); 
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.3); 
+      text-align: center;
+      margin-top: 130px;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+
+    #image-form {
+      text-align: center;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    label {
+      background-color: #000000;
+      color: #fff;
+      padding: 10px 15px;
+      cursor: pointer;
+      border-radius: 5px;
+      transition: background-color 0.3s;
+    }
+
+    label:hover {
+      background-color: #2980b9;
+    }
+
+    button {
+      margin-top: 10px;
+      padding: 10px 15px;
+      background-color: #2ecc71;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    button:hover {
+      background-color: #27ae60;
+    }
+
+    #result {
+      margin-top: 20px;
+      padding: 20px;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      max-width: 400px;
+      overflow: hidden;
+      opacity: 0;
+      transform: translateY(-20px);
+      transition: opacity 0.5s, transform 0.5s;
+    }
+
+    #result.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    #result-box {
+      padding: 10px;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      margin: 0;
+    }
+
+    #result-box pre {
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    #result.fracture-detected {
+      background-color: #ff9999; 
+    }
+
+    #result.no-fracture-detected {
+      background-color: #1aff00; 
+    }
+  </style>
+</head>
+<body>
+  <div id="main-container">
+    <h1>Choose MRI/CT scan</h1>
+    <form id="image-form" action="/predict" method="post" enctype="multipart/form-data">
+      <label for="file">Choose an image</label>
+      <input type="file" name="file" id="file" accept="image/*" required />
+      <button type="submit">Detect</button>
+    </form>
+
+    <div id="result">
+      <div id="result-box">
+        <pre id="prediction-text"></pre>
+      </div>
+    </div>
+
+    <button onclick="logout()">Logout</button>
+  </div>
+
+  <script>
+    function logout() {
+      // Redirect to the login page
+      window.location.href = "/logout";
+    }
+
+    document.getElementById("image-form").addEventListener("submit", function (event) {
+      event.preventDefault();
+      var form = this;
+      var fileInput = document.getElementById("file");
+
+      if (!fileInput.files.length) {
+        alert("Please choose an image before predicting.");
+        return;
+      }
+
+      var formData = new FormData(form);
+
+      fetch("http://localhost:5000/predict", {
+        method: "POST",
+        body: formData,
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          var result = JSON.stringify(data);
+          var predictionText = document.getElementById("prediction-text");
+          predictionText.textContent = formatPrediction(data);
+          var resultContainer = document.getElementById("result");
+
+          // Remove previous classes to reset the color
+          resultContainer.classList.remove("fracture-detected");
+          resultContainer.classList.remove("no-fracture-detected");
+
+          if (data.fracture_probability >= 0.5) {
+            resultContainer.classList.add("fracture-detected");
+          } else {
+            resultContainer.classList.add("no-fracture-detected");
+          }
+
+          resultContainer.classList.add("show");
+
+          function formatPrediction(data) {
+            if (data.fracture_probability >= 0.5) {
+              var fracturedBone = getFracturedBone(data.c1c7_probabilities);
+              return "Fracture detected! \nFractured bone: " + fracturedBone;
+            } else {
+              return "No fracture detected.";
+            }
+          }
+
+          function getFracturedBone(c1c7_probabilities) {
+            var bones = ["C1", "C2", "C3", "C4", "C5", "C6", "C7"];
+            for (var i = 0; i < c1c7_probabilities.length; i++) {
+              if (c1c7_probabilities[i] >= 0.5) {
+                return bones[i];
+              }
+            }
+            return "Unknown";
+          }
+        })
+        .catch((error) => {
+          console.error("Error:", error);
+        });
+    });
+  </script>
+</body>
+</html>
