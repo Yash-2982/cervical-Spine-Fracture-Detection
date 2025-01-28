@@ -1,0 +1,126 @@
+import os
+import pandas as pd
+import numpy as np
+import tensorflow as tf
+import pydicom
+from tensorflow import keras
+from keras.models import Model
+from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Input
+from keras.optimizers import Adam
+
+def load_dicom_images_from_folder(folder_path, metadata, batch_size=32):
+    if not os.path.exists(folder_path):
+        print(f"Folder '{folder_path}' does not exist.")
+        return None
+    file_paths = tf.constant([os.path.join(folder_path, file_name) for file_name in os.listdir(folder_path) if file_name.endswith('.dcm')])
+    dataset = tf.data.Dataset.from_tensor_slices(file_paths)
+
+    dataset = dataset.batch(batch_size)
+    return dataset
+
+def generator(folder_path, metadata):
+    print("DFODLER",folder_path)
+    dataset = tf.data.Dataset.from_tensor_slices(tf.constant([file_name.numpy().decode() for file_name in tf.data.Dataset.list_files(os.path.join(folder_path, '*.dcm'))]))
+    for file_path in dataset:
+        print("Filelilil", file_path.numpy().decode())
+        yield parse_dicom(file_path.numpy().decode(), metadata.loc[metadata['StudyInstanceUID'] == os.path.basename(folder_path)])
+
+# Define parse_dicom function
+
+def parse_dicom(file_path, metadata):
+    print("file  ", file_path)
+    print("meta  ", metadata)
+    file_path_str = str(file_path)  # Convert SymbolicTensor to string
+    print(file_path_str)  # Convert SymbolicTensor to string
+    dcm = pydicom.dcmread(file_path_str)  # Convert to numpy array to get the string value
+    image = dcm.pixel_array.astype(float) / np.max(dcm.pixel_array)  # Normalize pixel values
+    image = tf.expand_dims(image, axis=-1)  # Add a channel dimension to make it 3-dimensional
+    image_resized = tf.image.resize_with_pad(image, target_height=512, target_width=512)  # Resize image with padding
+    labels = metadata[['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7']].values.flatten()
+    fracture_label = metadata[['patient_overall']].values.flatten()
+    return image_resized, {'fracture': fracture_label, 'c1c7': labels}
+
+
+
+
+# Load metadata CSV files
+train_metadata = pd.read_csv('train.csv')
+
+# Load train images for the specified patient folders
+train_datasets = []
+for folder_name in train_metadata['StudyInstanceUID'].unique():
+    folder_path = os.path.join('train', 'images', folder_name)
+    if os.path.exists(folder_path):  # Check if the folder exists
+        dataset = tf.data.Dataset.from_generator(lambda: generator(folder_path, train_metadata), output_signature=(
+            tf.TensorSpec(shape=(512, 512, 1), dtype=tf.float32),
+            {'fracture': tf.TensorSpec(shape=(None,), dtype=tf.float32), 'c1c7': tf.TensorSpec(shape=(7,), dtype=tf.float32)}
+        ))
+        if dataset:
+            train_datasets.append(dataset)  # Append the dataset directly
+    # else:
+    #     print(f"Folder '{folder_path}' does not exist.")
+
+# Merge datasets
+train_dataset = train_datasets[0]
+for dataset in train_datasets[1:]:
+    train_dataset = train_dataset.concatenate(dataset)
+for batch in train_dataset.take(1):
+    images, labels = batch
+    print("Input shape:", images.shape)
+    print("Label shapes:", {key: value.shape for key, value in labels.items()})
+
+
+
+def create_model(input_shape):
+    # Define input layer
+    input_layer = Input(shape=input_shape)
+    print("Input shape:", input_layer.shape)  # Add this line
+    
+    # Convolutional layers
+    conv1 = Conv2D(32, (3, 3), activation='relu', padding='same')(input_layer)
+    maxpool1 = MaxPooling2D((2, 2), padding='same')(conv1)
+    conv2 = Conv2D(64, (3, 3), activation='relu', padding='same')(maxpool1)
+    maxpool2 = MaxPooling2D((2, 2), padding='same')(conv2)
+    conv3 = Conv2D(128, (3, 3), activation='relu', padding='same')(maxpool2)
+    maxpool3 = MaxPooling2D((2, 2), padding='same')(conv3)
+    print("Shape after maxpool3:", maxpool3.shape)  # Add this line
+    
+    # Flatten layer
+    flatten = Flatten()(maxpool3)
+    print("Shape after flatten:", flatten.shape)  # Add this line
+    
+    # Dense layers for fracture prediction
+    dense_fracture = Dense(64, activation='relu')(flatten)
+    output_fracture = Dense(1, activation='sigmoid', name='fracture')(dense_fracture)
+    
+    # Dense layers for C1-C7 prediction
+    dense_c1c7 = Dense(64, activation='relu')(flatten)
+    output_c1c7 = Dense(7, activation='softmax', name='c1c7')(dense_c1c7)
+    
+    # Define model
+    model = Model(inputs=input_layer, outputs=[output_fracture, output_c1c7])
+    
+    return model
+
+# Define input shape
+input_shape = (512, 512, 1)
+
+# Create the model
+model = create_model(input_shape)
+
+# Compile the model
+model.compile(optimizer=Adam(), 
+              loss={'fracture': 'binary_crossentropy', 'c1c7': 'categorical_crossentropy'},
+              metrics={'fracture': 'accuracy', 'c1c7': 'accuracy'})
+
+# Print model summary
+print(model.summary())
+
+
+# Fit the model to the train_dataset
+batch_size = 32  # Set batch size
+num_epochs = 10   # Set number of epochs
+
+train_dataset = train_dataset.batch(batch_size).repeat(num_epochs).prefetch(tf.data.experimental.AUTOTUNE)
+history = model.fit(train_dataset)
+model.save("trained_modelFM.h5")
